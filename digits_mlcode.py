@@ -63,7 +63,7 @@ labels = train_data[0::,0]
 
 #7.  SelectKBest (my tests commented out)
 
-from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import SelectKBest, f_classif
 
 #x = 0
 #y = 0
