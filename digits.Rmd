@@ -1,0 +1,256 @@
+---
+title: "Digits - EDA"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r intro, echo=FALSE}
+
+setwd('/Users/bryonymiles/documents/dataprojects/machinelearning')
+digit <-read.csv('digit_pixels.csv')
+```
+
+#1. Introduction
+
+This is my attempt at entering the kaggle Digit Recognizer competition: 
+
+https://www.kaggle.com/c/digit-recognizer
+
+The kaggle data incorporates approx.40,000 entries with avg_pixelss from 0-255 with  785 columns or pixel positions.  There is an even distribution of entries for the 10 numbers/outcomes (0-9).
+
+The data has already been processed in Python as follows:
+
+1. all columns with constant values have been removed (< 200 columns)
+
+2. the data was grouped by number/outcome and all columns with pixels <= 20 were deleted.  This cuts down the total column names to: 
+```{r echo=FALSE}
+length(unique(digit$column_name))
+```
+
+
+3. A new dataframe has been created with 3 fields:
+
+* number/outcome
+* column_name
+* avg_pixels
+
+This should help me visualise if any further columns should be removed or whether or not I can create any composite features.
+
+
+#2. Pixel distribution
+
+I then drew a few graphs to get a handle on the data.
+
+a) Histograms: column counts by number
+
+```{r echo=FALSE}
+library(ggplot2)
+library(gridExtra)
+
+ggplot(data = digit, aes(x = avg_pixels)) + 
+  geom_histogram(binwidth = 20, colour=I('darkblue'),fill=I('lightblue')) +
+  facet_wrap(~number)
+
+```
+
+b) Histograms: average pixel value counts by number
+
+```{r echo=FALSE}
+
+ggplot(data = digit, aes(x = column_name)) + 
+  geom_histogram(binwidth = 50, , colour=I('red'),fill=I('orange')) +
+  facet_wrap(~number)
+
+```
+
+c) Column name v average pixel value by number (jittered so you can see density)
+
+```{r dim, echo=FALSE}
+
+ggplot(aes(x=column_name,y=avg_pixels),data = digit) + 
+  geom_jitter(alpha=0.1, colour=I('blue'))+
+  facet_wrap(~number)
+```
+
+d) Column name v average pixel value - all numbers
+
+```{r echo=FALSE}
+
+
+ggplot(aes(x=column_name,y=avg_pixels),data = digit) + 
+  geom_jitter(alpha=0.7,aes(colour = number))
+
+```
+
+There seem to be a few patterns here:
+
+0 - more than 40 avg_pixels 150-175 range
+1 - only number avg_pixels over 225
+6 - only number with avg_pixels under 20?
+
+#3. More Questions
+
+a) Are the datapoints distributed fairly evenly amongst the column names?  I tested this by cutting the column_names into twelve bins and looking at the distribution for each number.  Here is an example for zero.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+library(dplyr)
+
+facets <- function(my_number) {
+   
+  filtered <- filter(digit,number==my_number)
+  ggplot(aes(y=avg_pixels,x=column_name),data = filtered) +
+  geom_jitter(alpha=0.8,aes(colour = number)) + 
+    facet_wrap(~pixel_no_bins, scales = "free_x")
+    
+}
+
+digit$pixel_no_bins <- cut_interval(digit$column_name, 12)
+digit$pixel_val_bins <- cut_interval(digit$avg_pixels, 12)
+facets('zero')
+
+
+```
+
+Answer: Yes, they seem to be relatively well distributed for each number.  Dead end here?
+
+b) Does GGPairs have anything to add? 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+require(GGally)
+ggpairs(digit) # aesthetics, ggplot2 style
+
+```
+
+The box plots look interesting.  
+
+i) column name seems to have a consistent mean across the numbers and the majority of the data falls within the 250-575 range.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(x=number,y=column_name),data = digit) + 
+  geom_boxplot()
+
+```
+
+ii) Average pixel means seems a bit more varied and the majority falls within the 25-155 range.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(x=number,y=avg_pixels),data = digit) + 
+  geom_boxplot()
+
+```
+
+3. This let me on to thinking about pixel strength and whether or not the higher/stronger pixel range would be more distinctive than the lower?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+g1 <- ggplot(aes(x=number,y=avg_pixels),data = filter(digit,avg_pixels <=50)) + 
+  geom_boxplot()
+
+g2 <- ggplot(aes(x=number,y=avg_pixels),data = filter(digit,avg_pixels >50 & avg_pixels<=100)) + 
+  geom_boxplot()
+
+g3 <- ggplot(aes(x=number,y=avg_pixels),data = filter(digit,avg_pixels >100 & avg_pixels<=150)) + 
+  geom_boxplot()
+
+g4 <- ggplot(aes(x=number,y=avg_pixels),data = filter(digit,avg_pixels>150)) + 
+  geom_boxplot()
+
+grid.arrange(g1,g2,g3,g4)
+
+```
+
+There is a much clearer distinction between the different numbers/outcomes above 100 pixels, even more so above 150.
+
+Double check whether this distinction applies across columns names as well?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+g1 <- ggplot(aes(x=number,y=column_name),data = filter(digit,avg_pixels <=50)) + 
+  geom_boxplot()
+
+g2 <- ggplot(aes(x=number,y=column_name),data = filter(digit,avg_pixels >50 & avg_pixels<=100)) + 
+  geom_boxplot()
+
+g3 <- ggplot(aes(x=number,y=column_name),data = filter(digit,avg_pixels >100 & avg_pixels<=150)) + 
+  geom_boxplot()
+
+g4 <- ggplot(aes(x=number,y=column_name),data = filter(digit,avg_pixels>150)) + 
+  geom_boxplot()
+
+grid.arrange(g1,g2,g3,g4)
+
+```
+
+Yes...
+
+4. I then checked the distribution for column names outside the majority 250-575 range.  
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+drawplot <- function(newdata){
+  
+  ggplot(aes(x=column_name,y=avg_pixels),data = newdata) + 
+  geom_jitter(alpha=0.8,aes(colour = number))
+
+}
+
+drawplot(filter(digit,column_name <=250))
+drawplot(filter(digit,column_name >=575))
+
+```
+
+The distribution is less even across the numbers particularly under 200 and over 700.  This could help the algorithm.  The problem is, a lot of them are under 150 which I was considering removing...  
+
+#4. Conclusion
+
+I'll move to the Machine Learning stage with four different datasets:
+
+1) all columns with constant values and avg pixels values < 20 removed - *TOTAL COLUMNS*: `r length(unique(digit$column_name))` 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+write.csv(unique(digit$column_name), file = "digit_cols1under20.csv",row.names=FALSE)
+filtered <- filter(digit,avg_pixels >100)
+
+```
+
+2) as above but all columns with avg pixels values < 100 removed - *TOTAL COLUMNS*: `r length(unique(filtered$column_name))` 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+write.csv(unique(filtered$column_name), file ="digit_cols2under100.csv",row.names=FALSE)
+
+filtered <- filter(digit,avg_pixels >150)
+
+```
+
+3) as no.1 but all columns with avg pixels values < 150 removed - *TOTAL COLUMNS*: `r length(unique(filtered$column_name))`
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+write.csv(unique(filtered$column_name), file ="digit_cols3under150.csv",row.names=FALSE)
+
+filtered <- filter(digit,avg_pixels >100)
+filtered2 <- filter(digit,column_name <200 | column_name > 700)
+all_rows <- union(filtered,filtered2)
+```
+4) as no.2 but including columns wih names < 200 and > 700 - *TOTAL COLUMNS*: `r length(unique(all_rows$column_name)) ` 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+write.csv(unique(all_rows$column_name), file ="digit_cols4under100extras.csv", row.names=FALSE)
+
+filtered <- filter(digit,avg_pixels >150)
+all_rows <- union(filtered,filtered2)
+
+```
+5) as no.3 but including columns wih names < 200 and > 700  - *TOTAL COLUMNS*: `r length(unique(all_rows$column_name))` 
+
+```{r echo=FALSE}
+write.csv(unique(all_rows$column_name), file ="digit_cols5under150extras.csv", row.names=FALSE)
+
+```
+
+
